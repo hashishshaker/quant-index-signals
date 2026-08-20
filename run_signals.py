@@ -25,6 +25,8 @@ TICKERS = {
 def fetch_index_data(ticker, period="1y"):
     df = yf.download(ticker, period=period)
     df = df.reset_index()
+    df['Close'] = df['Close'].astype(float).squeeze()
+    df['Volume'] = df['Volume'].astype(float).squeeze()
     df = df[['Date', 'Close', 'Volume']]
     return df
 
