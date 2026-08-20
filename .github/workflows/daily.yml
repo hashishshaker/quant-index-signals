@@ -1,0 +1,28 @@
+name: Multi Daily Index Signals
+
+on:
+  schedule:
+    - cron: "30 6 * * *"   # 12:00 PM IST
+    - cron: "30 9 * * *"   # 3:00 PM IST
+    - cron: "30 12 * * *"  # 6:00 PM IST
+    - cron: "30 15 * * *"  # 9:00 PM IST
+  workflow_dispatch:
+
+jobs:
+  run-signals:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run signal script
+        run: python run_signals.py
