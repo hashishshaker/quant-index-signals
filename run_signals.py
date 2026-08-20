@@ -25,8 +25,17 @@ TICKERS = {
 def fetch_index_data(ticker, period="1y"):
     df = yf.download(ticker, period=period)
     df = df.reset_index()
-    df['Close'] = df['Close'].astype(float).squeeze()
-    df['Volume'] = df['Volume'].astype(float).squeeze()
+
+    # Force Close & Volume to be 1-D Series
+    if isinstance(df['Close'], pd.DataFrame):
+        df['Close'] = df['Close'].iloc[:, 0]
+
+    if isinstance(df['Volume'], pd.DataFrame):
+        df['Volume'] = df['Volume'].iloc[:, 0]
+
+    df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+    df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+
     df = df[['Date', 'Close', 'Volume']]
     return df
 
