@@ -2,6 +2,7 @@ import pandas as pd
 import yfinance as yf
 import ta
 from datetime import datetime
+import numpy as np
 
 # ---------------------------------------------------------
 # 1. DEFINE YOUR TICKERS HERE
@@ -26,18 +27,18 @@ def fetch_index_data(ticker, period="1y"):
     df = yf.download(ticker, period=period)
     df = df.reset_index()
 
-    # Force Close & Volume to be 1-D Series
-    if isinstance(df['Close'], pd.DataFrame):
-        df['Close'] = df['Close'].iloc[:, 0]
+    # --- Force Close & Volume into true 1-D arrays ---
+    # Convert to numpy array, flatten, then convert back to Series
+    df['Close'] = pd.Series(np.ravel(df['Close']))
+    df['Volume'] = pd.Series(np.ravel(df['Volume']))
 
-    if isinstance(df['Volume'], pd.DataFrame):
-        df['Volume'] = df['Volume'].iloc[:, 0]
-
+    # Convert to numeric safely
     df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
     df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
 
     df = df[['Date', 'Close', 'Volume']]
     return df
+
 
 
 # ---------------------------------------------------------
