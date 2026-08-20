@@ -27,18 +27,13 @@ def fetch_index_data(ticker, period="1y"):
     df = yf.download(ticker, period=period)
     df = df.reset_index()
 
-    # --- Force Close & Volume into true 1-D arrays ---
-    # Convert to numpy array, flatten, then convert back to Series
-    df['Close'] = pd.Series(np.ravel(df['Close']))
-    df['Volume'] = pd.Series(np.ravel(df['Volume']))
-
-    # Convert to numeric safely
-    df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
-    df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+    # --- Force Close & Volume into true 1-D numeric Series ---
+    # Extract underlying values no matter what weird structure Yahoo returns
+    df['Close'] = pd.to_numeric(df['Close'].apply(lambda x: x[0] if isinstance(x, (list, tuple, np.ndarray)) else x), errors='coerce')
+    df['Volume'] = pd.to_numeric(df['Volume'].apply(lambda x: x[0] if isinstance(x, (list, tuple, np.ndarray)) else x), errors='coerce')
 
     df = df[['Date', 'Close', 'Volume']]
     return df
-
 
 
 # ---------------------------------------------------------
