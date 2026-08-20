@@ -80,3 +80,13 @@ def run_all_signals():
 if __name__ == "__main__":
     table = run_all_signals()
     print(table)
+
+
+def save_results_to_csv(table, filename="signals_log.csv"):
+    try:
+        existing = pd.read_csv(filename)
+        updated = pd.concat([existing, table], ignore_index=True)
+    except FileNotFoundError:
+        updated = table
+
+    updated.to_csv(filename, index=False)
