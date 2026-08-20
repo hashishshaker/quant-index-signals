@@ -10,7 +10,11 @@ TICKERS = {
     "^GSPC": "S&P 500",
     "^IXIC": "Nasdaq",
     "^NSEI": "Nifty 50",
-    "^NSMIDCP": "Nifty Next 50"
+    "^NSMIDCP": "Nifty Next 50",
+    "NIFTYMIDCAP150.NS": "Nifty midcap 150",
+    "NIFTYSMLCAP250.NS": "Nifty smallcap 250",
+    "QTOP": "iShares Nasdaq Top 30 Stocks ETF",
+    "KBWB": "Invesco KBW Bank ETF"
 }
 # Add/remove tickers as needed
 
