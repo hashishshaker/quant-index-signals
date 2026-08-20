@@ -26,3 +26,11 @@ jobs:
 
       - name: Run signal script
         run: python run_signals.py
+
+      - name: Commit results
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add signals_log.csv
+          git commit -m "Daily signal update"
+          git push
