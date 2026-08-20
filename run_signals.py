@@ -27,9 +27,16 @@ def fetch_index_data(ticker, period="1y"):
     df = yf.download(ticker, period=period)
     df = df.reset_index()
 
-    # --- FORCE Close & Volume into clean 1-D numeric arrays ---
-    close_raw = np.array(df['Close']).reshape(-1)
-    volume_raw = np.array(df['Volume']).reshape(-1)
+    # --- FIX: Extract the actual column if Yahoo returns a DataFrame ---
+    if isinstance(df['Close'], pd.DataFrame):
+        df['Close'] = df['Close'].iloc[:, 0]
+
+    if isinstance(df['Volume'], pd.DataFrame):
+        df['Volume'] = df['Volume'].iloc[:, 0]
+
+    # --- Now convert to numpy and flatten ---
+    close_raw = np.asarray(df['Close']).flatten()
+    volume_raw = np.asarray(df['Volume']).flatten()
 
     df['Close'] = pd.to_numeric(close_raw, errors='coerce')
     df['Volume'] = pd.to_numeric(volume_raw, errors='coerce')
