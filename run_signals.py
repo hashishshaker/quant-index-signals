@@ -1,7 +1,7 @@
 import pandas as pd
 import yfinance as yf
 import ta
-from datetime import datetime
+import datetime
 import numpy as np
 
 # ---------------------------------------------------------
