@@ -8,14 +8,7 @@ import numpy as np
 # 1. DEFINE YOUR TICKERS HERE
 # ---------------------------------------------------------
 TICKERS = {
-    "^GSPC": "S&P 500",
-    "^IXIC": "Nasdaq",
-    "^NSEI": "Nifty 50",
-    "^NSMIDCP": "Nifty Next 50",
-    "NIFTYMIDCAP150.NS": "Nifty midcap 150",
-    "NIFTYSMLCAP250.NS": "Nifty smallcap 250",
-    "QTOP": "iShares Nasdaq Top 30 Stocks ETF",
-    "KBWB": "Invesco KBW Bank ETF"
+    "^GSPC": "S&P 500"
 }
 # Add/remove tickers as needed
 
@@ -23,24 +16,10 @@ TICKERS = {
 # ---------------------------------------------------------
 # 2. FETCH DATA FOR ONE TICKER
 # ---------------------------------------------------------
-def fetch_index_data(ticker, period="1y"):
-    df = yf.download(ticker, period=period)
-    df = df.reset_index()
-
-    # --- FIX: Extract the actual column if Yahoo returns a DataFrame ---
-    if isinstance(df['Close'], pd.DataFrame):
-        df['Close'] = df['Close'].iloc[:, 0]
-
-    if isinstance(df['Volume'], pd.DataFrame):
-        df['Volume'] = df['Volume'].iloc[:, 0]
-
-    # --- Now convert to numpy and flatten ---
-    close_raw = np.asarray(df['Close']).flatten()
-    volume_raw = np.asarray(df['Volume']).flatten()
-
-    df['Close'] = pd.to_numeric(close_raw, errors='coerce')
-    df['Volume'] = pd.to_numeric(volume_raw, errors='coerce')
-
+def fetch_index_data(ticker):
+    start_date = datetime.datetime.fromtimestamp(1000000000).strftime("%Y-%m-%d")
+    end_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    df = yf.download(ticker, start=start_date, end=end_date)
     df = df[['Date', 'Close', 'Volume']]
     return df
 
