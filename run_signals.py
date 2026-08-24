@@ -20,7 +20,7 @@ def fetch_index_data(ticker):
     start_date = datetime.datetime.fromtimestamp(1000000000).strftime("%Y-%m-%d")
     end_date = datetime.datetime.now().strftime("%Y-%m-%d")
     df = yf.download(ticker, start=start_date, end=end_date)
-    df = df[['Date', 'Close', 'Volume']]
+    df = df[['Close', 'Volume']]
     return df
 
 
