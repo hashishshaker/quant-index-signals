@@ -1,4 +1,6 @@
+import io
 import re
+import urllib.request
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -6,11 +8,13 @@ import altair as alt
 
 st.set_page_config(page_title="Multi-Ticker Trend & Reversal Screener", layout="wide")
 
+DEFAULT_CSV_URL = "https://raw.githubusercontent.com/hashishshaker/quant-index-signals/refs/heads/main/input_tickers.csv"
+
 # --- HEADER & METHODOLOGY SECTION ---
 st.title("Multi-Ticker Trend & Reversal Screener")
 
 st.markdown("""
-Paste your watchlist below to screen multiple stocks simultaneously using **Volatility (Bollinger Bands)**, **Volume Capitulation**, **Momentum (RSI & MACD)**, and **Moving Averages (20 EMA, 50 SMA, 200 SMA)**.
+Screens your watchlist using **Volatility (Bollinger Bands)**, **Volume Capitulation**, **Momentum (RSI & MACD)**, and **Moving Averages (20 EMA, 50 SMA, 200 SMA)**, automatically resolving human-readable names for every symbol.
 """)
 
 with st.expander("How the Buy / Sell Signal Process Works", expanded=False):
@@ -47,16 +51,69 @@ with st.expander("How the Buy / Sell Signal Process Works", expanded=False):
 
 st.divider()
 
+# --- HELPER FUNCTIONS: CSV PARSING & NAME LOOKUP ---
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_remote_csv(url: str) -> str:
+    with urllib.request.urlopen(url, timeout=10) as response:
+        return response.read().decode("utf-8")
+
+def parse_tickers_and_names(raw_text: str) -> dict[str, str]:
+    """
+    Supports both:
+    1) Headerless comma/newline lists: ^NSEI, ^NSMIDCP, HDFCGOLD.NS
+    2) Structured CSVs with headers: Ticker,Name
+    Returns {TICKER: custom_name_or_empty_string}
+    """
+    ticker_map: dict[str, str] = {}
+    cleaned = raw_text.strip()
+    if not cleaned:
+        return ticker_map
+
+    first_line = cleaned.splitlines()[0].lower()
+    has_header = any(h in first_line for h in ("ticker", "symbol"))
+
+    if has_header:
+        df_in = pd.read_csv(io.StringIO(cleaned))
+        cols_lower = {c.strip().lower(): c for c in df_in.columns}
+        ticker_col = next((cols_lower[k] for k in ("ticker", "symbol", "tickers", "symbols") if k in cols_lower), df_in.columns[0])
+        name_col = next((cols_lower[k] for k in ("name", "company", "index", "description", "label") if k in cols_lower), None)
+
+        for _, row in df_in.iterrows():
+            t = str(row[ticker_col]).strip().upper()
+            if t and t != "NAN":
+                custom_name = str(row[name_col]).strip() if (name_col and pd.notna(row[name_col])) else ""
+                ticker_map[t] = custom_name
+    else:
+        for token in re.split(r"[,\s\n]+", cleaned):
+            t = token.strip().upper()
+            if t:
+                ticker_map[t] = ""
+
+    return ticker_map
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_yahoo_name(ticker: str) -> str:
+    """Fetches shortName/longName from Yahoo Finance and caches it for 24 hours."""
+    try:
+        info = yf.Ticker(ticker).info
+        if isinstance(info, dict):
+            return info.get("shortName") or info.get("longName") or ticker
+    except Exception:
+        pass
+    return ticker
+
 # --- DATA FETCHING & SIGNAL LOGIC ---
 @st.cache_data(ttl=3600, show_spinner=False)
-def analyze_ticker(ticker: str):
+def analyze_ticker(ticker: str, custom_name: str = ""):
+    display_name = custom_name if custom_name else fetch_yahoo_name(ticker)
+
     try:
         df = yf.download(ticker, period="18mo", interval="1d", auto_adjust=True, progress=False)
     except Exception as e:
-        return None, {"Ticker": ticker, "Action": "ERROR", "Details": f"Download failed: {e}"}
+        return None, {"Ticker": ticker, "Name": display_name, "Action": "ERROR", "Details": f"Download failed: {e}"}
     
     if df.empty or len(df) < 200:
-        return None, {"Ticker": ticker, "Action": "ERROR", "Details": "Insufficient data (<200 trading days) or invalid symbol."}
+        return None, {"Ticker": ticker, "Name": display_name, "Action": "ERROR", "Details": "Insufficient data (<200 trading days) or invalid symbol."}
 
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
@@ -161,6 +218,7 @@ def analyze_ticker(ticker: str):
 
     summary_row = {
         "Ticker": ticker,
+        "Name": display_name,
         "Action": action,
         "Details": details,
         "Price": round(price, 2),
@@ -174,63 +232,63 @@ def analyze_ticker(ticker: str):
     return df, summary_row
 
 # --- INPUT SECTION ---
+csv_url = st.text_input("GitHub Raw CSV URL:", value=DEFAULT_CSV_URL)
+
+# Pre-load tickers from GitHub URL on first load
+default_text = ""
+if csv_url.strip():
+    try:
+        default_text = fetch_remote_csv(csv_url.strip())
+    except Exception as e:
+        st.warning(f"Could not fetch URL automatically ({e}). You can still paste tickers or upload a CSV below.")
+
 input_col1, input_col2 = st.columns([2, 1])
 
 with input_col1:
     raw_tickers = st.text_area(
-        "Enter Tickers (comma, space, or newline separated):",
-        value="AAPL, MSFT, NVDA, RELIANCE.NS, TCS.NS",
-        height=100
+        "Watchlist Tickers (auto-loaded from URL above, or edit directly):",
+        value=default_text,
+        height=110
     )
 
 with input_col2:
-    uploaded_file = st.file_uploader("Or upload a watchlist (.csv or .txt)", type=["csv", "txt"])
+    uploaded_file = st.file_uploader("Or upload a local CSV / TXT file", type=["csv", "txt"])
 
-# Parse tickers from text area and/or uploaded file
-tickers = []
-if raw_tickers.strip():
-    tickers.extend(re.split(r"[,\s\n]+", raw_tickers.strip()))
-
+# Merge text area and uploaded file into {Ticker: CustomName}
+ticker_map = parse_tickers_and_names(raw_tickers)
 if uploaded_file is not None:
-    if uploaded_file.name.endswith(".txt"):
-        content = uploaded_file.read().decode("utf-8")
-        tickers.extend(re.split(r"[,\s\n]+", content.strip()))
-    elif uploaded_file.name.endswith(".csv"):
-        csv_df = pd.read_csv(uploaded_file)
-        # Look for a 'ticker' or 'symbol' column, otherwise use the first column
-        matching_cols = [c for c in csv_df.columns if c.strip().lower() in ("ticker", "symbol", "tickers", "symbols")]
-        target_col = matching_cols[0] if matching_cols else csv_df.columns[0]
-        tickers.extend(csv_df[target_col].dropna().astype(str).tolist())
-
-# Deduplicate while preserving order
-clean_tickers = list(dict.fromkeys([t.upper().strip() for t in tickers if t.strip()]))
+    file_text = uploaded_file.read().decode("utf-8")
+    ticker_map.update(parse_tickers_and_names(file_text))
 
 # Run Screener
-if st.button("Screen Watchlist", type="primary") and clean_tickers:
+if st.button("Screen Watchlist", type="primary") and ticker_map:
     results = []
     valid_dfs = {}
+    resolved_names = {}
     
-    progress_bar = st.progress(0, text="Analyzing tickers...")
-    for idx, t in enumerate(clean_tickers):
-        df, row = analyze_ticker(t)
+    total = len(ticker_map)
+    progress_bar = st.progress(0, text="Fetching names & analyzing tickers...")
+    for idx, (t, custom_name) in enumerate(ticker_map.items()):
+        df, row = analyze_ticker(t, custom_name)
         results.append(row)
+        resolved_names[t] = row["Name"]
         if df is not None:
             valid_dfs[t] = df
-        progress_bar.progress((idx + 1) / len(clean_tickers), text=f"Analyzed {t} ({idx + 1}/{len(clean_tickers)})")
+        progress_bar.progress((idx + 1) / total, text=f"Analyzed {t} — {row['Name']} ({idx + 1}/{total})")
     progress_bar.empty()
 
-    # Store in session state so table filtering & chart dropdown work without re-running
     st.session_state["results_df"] = pd.DataFrame(results)
     st.session_state["valid_dfs"] = valid_dfs
+    st.session_state["resolved_names"] = resolved_names
 
 # --- DISPLAY RESULTS TABLE & DRILL-DOWN CHART ---
 if "results_df" in st.session_state:
     results_df = st.session_state["results_df"]
     valid_dfs = st.session_state["valid_dfs"]
+    resolved_names = st.session_state.get("resolved_names", {})
 
     st.subheader(f"Screener Results ({len(results_df)} Tickers)")
 
-    # Quick Action Filter & CSV Download
     filter_col, dl_col = st.columns([3, 1])
     with filter_col:
         action_filter = st.radio(
@@ -256,7 +314,6 @@ if "results_df" in st.session_state:
             mime="text/csv"
         )
 
-    # Color styling for Action badges
     def style_action(val: str) -> str:
         if "BUY" in val:
             return "background-color: rgba(16, 185, 129, 0.2); color: #059669; font-weight: bold;"
@@ -275,7 +332,8 @@ if "results_df" in st.session_state:
         st.subheader("Chart Inspector")
         selected_ticker = st.selectbox(
             "Select a ticker from your watchlist to inspect its chart:",
-            options=list(valid_dfs.keys())
+            options=list(valid_dfs.keys()),
+            format_func=lambda t: f"{t} — {resolved_names.get(t, t)}"
         )
 
         if selected_ticker:
@@ -323,3 +381,5 @@ if "results_df" in st.session_state:
                 .properties(height=420)
                 .interactive()
             )
+
+            st.altair_chart(chart, use_container_width=True)
